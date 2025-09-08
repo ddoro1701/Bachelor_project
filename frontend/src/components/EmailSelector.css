@@ -1,5 +1,10 @@
 .email-selector {
-  margin: 20px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .send-email-section {
@@ -7,10 +12,17 @@
   padding: 1em;
   border: 1px solid #ccc;
   text-align: center;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid var(--card-border);
+  background: linear-gradient(180deg, var(--card) 0%, #0a1020 100%);
+  box-shadow: var(--shadow);
+  padding: 16px;
 }
 
 .send-email-section p {
   margin: 0.5em 0;
+  color: var(--muted);
 }
 
 .send-email-section button {
@@ -21,6 +33,8 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.3s;
+  min-width: 240px;
+  margin-top: 10px;
 }
 
 .send-email-section button:hover {
@@ -33,6 +47,9 @@
   align-items: flex-start;
   gap: 20px;
   margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
 .email-select,
@@ -48,23 +65,18 @@
   border-radius: 4px;
   margin-top: 5px;
   margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #0a1224;
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  margin-top: 8px;
+  margin-bottom: 12px;
 }
 
 .email-select button,
 .new-lecturer button {
   width: 100%;
-  padding: 10px 16px;
-  color: #f0f8ff;
-  background-color: #1e3a5f;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.email-select button:hover,
-.new-lecturer button:hover {
-  background-color: #16324f;
 }
 
 .shipping-container {
@@ -73,10 +85,45 @@
   justify-content: center;
   gap: 20px;
   margin-top: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 20px;
 }
 
 .shipping-container select {
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  width: 100%;
+}
+
+.item-count select,
+.shipping-provider select {
+  width: 100%;
+}
+
+.additional-info-section textarea {
+  width: 100% !important;
+  height: 80px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--card-border) !important;
+  background: #0a1224;
+  color: var(--text);
+}
+
+.additional-info-section button {
+  width: 100%;
+  margin-top: 12px !important;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .email-container {
+    grid-template-columns: 1fr;
+  }
+  .shipping-container {
+    grid-template-columns: 1fr;
+  }
 }

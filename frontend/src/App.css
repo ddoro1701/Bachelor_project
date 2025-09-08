@@ -6,19 +6,59 @@
 }
 
 .App-header {
-  background-color: #1e3a5f; /* Dark blue */
   width: 100%;
-  padding: 1em;
-  color: #f0f8ff; /* Light blue/white */
+  color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 1rem;
 }
 
 .App-main {
   width: 100%;
-  padding: 1em;
+  padding: 1.5em 1em;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 24px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: .3px;
+}
+
+.subtitle {
+  margin: .25rem 0 0;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+/* Pretty file upload */
+.file-upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37,99,235,.35);
+  border: 1px solid rgba(255,255,255,.12);
+  transition: all .2s ease;
+}
+
+.file-upload:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.file-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }

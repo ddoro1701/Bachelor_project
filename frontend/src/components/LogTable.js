@@ -9,7 +9,6 @@ function DefaultColumnFilter({ column: { filterValue, setFilter } }) {
             value={filterValue || ''}
             onChange={e => setFilter(e.target.value || undefined)}
             placeholder="Search..."
-            style={{ width: '100%' }}
         />
     );
 }
@@ -46,6 +45,11 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
         {
             Header: 'Status',
             accessor: 'status',
+            Cell: ({ value }) => (
+                <span className={`badge ${value === 'Collected' ? 'badge-success' : 'badge-warn'}`}>
+                    {value}
+                </span>
+            ),
         },
         {
             Header: 'Action',
@@ -57,14 +61,13 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
         },
     ], [onToggleStatus]);
 
-    // Include rows from the table instance which represent the current filtered rows.
     const {
         getTableProps,
         getTableBodyProps,
         headerGroups,
         prepareRow,
-        page,       // current page rows
-        rows,       // all filtered rows
+        page,
+        rows,
         canPreviousPage,
         canNextPage,
         pageOptions,
@@ -87,7 +90,6 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
     );
 
     const exportToExcel = () => {
-        // Use the filtered rows (all pages) rather than "data".
         const exportData = rows.map(row => ({
             "Lecturer Email": row.original.lecturerEmail,
             "Item Count": row.original.itemCount,
@@ -96,17 +98,14 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
             "Collection Date": row.original.collectionDate ? new Date(row.original.collectionDate).toLocaleDateString() : '',
             "Status": row.original.status,
         }));
-
         const worksheet = XLSX.utils.json_to_sheet(exportData, {
             header: ["Lecturer Email", "Item Count", "Shipping Provider", "Additional Info", "Collection Date", "Status"]
         });
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Package Log");
-
         const today = new Date();
         const formattedDate = today.toISOString().split('T')[0];
         const fileName = `Package_Logs_${formattedDate}.xlsx`;
-
         const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
         const dataBlob = new Blob([excelBuffer], { type: "application/octet-stream" });
         saveAs(dataBlob, fileName);
@@ -164,24 +163,14 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                                         borderRight: '1px solid #ddd'
                                     }}
                                 >
-                                    <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                         {column.render('Header') === 'Action' ? '' : column.render('Header')}
-                                        <span style={{ marginLeft: '4px', fontSize: '0.8em' }}>
+                                        <span style={{ fontSize: '0.8em' }}>
                                             {column.isSorted ? (column.isSortedDesc ? ' 🔽' : ' 🔼') : ''}
                                         </span>
                                     </div>
                                     {column.canFilter ? (
-                                        <div style={{ marginTop: '6px' }}>
-                                            {/* Customize the filter input appearance */}
-                                            {column.render('Filter', {
-                                                style: {
-                                                    width: '90%',
-                                                    padding: '6px',
-                                                    borderRadius: '4px',
-                                                    border: '1px solid #ccc'
-                                                }
-                                            })}
-                                        </div>
+                                        <div style={{ marginTop: 6 }}>{column.render('Filter')}</div>
                                     ) : null}
                                 </th>
                             ))}
@@ -191,20 +180,16 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                 <tbody {...getTableBodyProps()}>
                     {page.map(row => {
                         prepareRow(row);
+                        const status = row.original.status;
+                        const rowClass = status === 'Collected'
+                            ? 'row-collected'
+                            : status === 'Received'
+                                ? 'row-received'
+                                : '';
                         return (
-                            <tr
-                                {...row.getRowProps()}
-                                style={{
-                                    backgroundColor: row.original.status === 'Collected'
-                                        ? '#d4edda' // Light green for Collected
-                                        : row.original.status === 'Received'
-                                            ? '#fff3cd' // Light orange for Received
-                                            : 'transparent',
-                                    borderBottom: '1px solid #eee',
-                                }}
-                            >
+                            <tr {...row.getRowProps()} className={rowClass}>
                                 {row.cells.map(cell => (
-                                    <td {...cell.getCellProps()} style={{ padding: '8px' }}>
+                                    <td {...cell.getCellProps()}>
                                         {cell.render('Cell')}
                                     </td>
                                 ))}
@@ -213,27 +198,18 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                     })}
                 </tbody>
             </table>
-            <div style={{ marginTop: '10px' }}>
-                <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>
-                    {'<<'}
-                </button>{' '}
-                <button onClick={() => previousPage()} disabled={!canPreviousPage}>
-                    Previous
-                </button>{' '}
-                <button onClick={() => nextPage()} disabled={!canNextPage}>
-                    Next
-                </button>{' '}
-                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>
-                    {'>>'}
-                </button>{' '}
-                <span>
-                    Page <strong>{pageIndex + 1} of {pageOptions.length}</strong>{' '}
-                </span>
+
+            <div className="table-controls">
+                <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
+                <button onClick={() => previousPage()} disabled={!canPreviousPage}>Previous</button>
+                <button onClick={() => nextPage()} disabled={!canNextPage}>Next</button>
+                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
+                <span>Page <strong>{pageIndex + 1} of {pageOptions.length}</strong></span>
                 <select
                     value={pageSize}
                     onChange={e => {
                         setPageSize(Number(e.target.value));
-                        gotoPage(0); // Reset to the first page when page size changes
+                        gotoPage(0);
                     }}
                 >
                     {[5, 10, 20, 50, 100, 200].map(size => (
@@ -242,8 +218,8 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                         </option>
                     ))}
                 </select>
-                <button onClick={exportToExcel} style={{ marginLeft: '10px' }}>Export to Excel</button>
-                <button onClick={handleDeleteCollected} style={{ marginLeft: '10px' }}>Delete Collected</button>
+                <button onClick={exportToExcel}>Export to Excel</button>
+                <button onClick={handleDeleteCollected}>Delete Collected</button>
             </div>
         </div>
     );
