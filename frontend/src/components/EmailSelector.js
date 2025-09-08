@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './EmailSelector.css';
 
 const EmailSelector = ({ ocrText, fetchPackages }) => {
@@ -7,11 +7,20 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
   const [newEmail, setNewEmail] = useState('');
   const [selectedEmail, setSelectedEmail] = useState('');
   const [recognizedEmail, setRecognizedEmail] = useState('');
-  const [shippingProvider, setShippingProvider] = useState('Amazon');
-  const [providerDescription, setProviderDescription] = useState('');
-  const [itemCount, setItemCount] = useState(1);
-  const [loading, setLoading] = useState(false); // Added loading state
-  const [error, setError] = useState(''); // Added error state
+  const [shippingProvider, setShippingProvider] = useState(() => localStorage.getItem('shippingProvider') || 'Amazon');
+  const [itemCount, setItemCount] = useState(() => Number(localStorage.getItem('itemCount') || 1));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Neu: Typeahead State
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  const suggestions = useMemo(() => {
+    const q = (selectedEmail || '').toLowerCase();
+    if (!q) return emails.slice(0, 8);
+    return emails.filter(e => e.toLowerCase().includes(q)).slice(0, 8);
+  }, [emails, selectedEmail]);
 
   // Load lecturer emails when component mounts.
   useEffect(() => {
@@ -41,27 +50,67 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         body: JSON.stringify(ocrText),
       })
         .then(res => {
-          console.log("Response from find-email:", res);
-          if (!res.ok) throw new Error("No matching lecturer email found.");
+          if (res.status === 404) {
+            // Endpoint (noch) nicht vorhanden im Deployment
+            setRecognizedEmail('');
+            setError('No matching lecturer email found.');
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: 'No lecturer suggestion found.' } }));
+            return null;
+          }
+          if (!res.ok) throw new Error('No matching lecturer email found.');
           return res.json();
         })
         .then(data => {
-          console.log("Matched OCR email:", data.email);
-          setRecognizedEmail(data.email);
+          if (data && data.email) setRecognizedEmail(data.email);
         })
-        .catch(err => {
-          console.error('Error finding email:', err);
+        .catch(() => {
           setError('No matching lecturer email found.');
         })
-        .finally(() => {
-          setLoading(false); // Stop loading
-        });
+        .finally(() => setLoading(false));
     }
   }, [ocrText]);
 
+  const handleSendEmail = () => {
+    if (!recognizedEmail) {
+      window.dispatchEvent(new CustomEvent('notice', {
+        detail: { type: 'error', message: 'No suggested lecturer found.' }
+      }));
+      return;
+    }
+    const packageData = {
+      LecturerEmail: recognizedEmail,
+      ItemCount: parseInt(itemCount, 10),
+      ShippingProvider: shippingProvider,
+      AdditionalInfo: providerDescription,
+      CollectionDate: new Date(),
+    };
+    fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(packageData),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Error sending package data');
+        return res.json();
+      })
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'success', message: 'Email sent to', lecturer: recognizedEmail }
+        }));
+        fetchPackages();
+        setItemCount(1);
+        setProviderDescription('');
+      })
+      .catch(() => {
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'error', message: 'Failed to create package record.' }
+        }));
+      });
+  };
+
   const handleAddEmail = () => {
     if (!newEmail.trim() || !fullName.trim()) {
-      alert("Please fill out the full name and the email");
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: 'Please provide full name and email.' } }));
       return;
     }
     const lecturerData = { Name: fullName, Email: newEmail };
@@ -79,8 +128,9 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         setSelectedEmail(addedLecturer.Email);
         setFullName('');
         setNewEmail('');
+        window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Lecturer added.' } }));
       })
-      .catch(err => console.error('Error adding email:', err));
+      .catch(() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: 'Failed to add lecturer.' } })));
   };
 
   const handleDeleteEmail = () => {
@@ -100,40 +150,6 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       .catch(err => console.error('Error deleting email:', err));
   };
 
-  const handleSendEmail = () => {
-    if (!recognizedEmail) {
-      alert("No suggested email available to send.");
-      return;
-    }
-
-    const packageData = {
-      LecturerEmail: recognizedEmail, // Use the suggested email explicitly
-      ItemCount: parseInt(itemCount, 10),
-      ShippingProvider: shippingProvider,
-      AdditionalInfo: providerDescription,
-      CollectionDate: new Date(),
-    };
-
-    fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(packageData),
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Error sending package data');
-        return res.json();
-      })
-      .then(data => {
-        alert("Package record created successfully. Email sent to the suggested lecturer.");
-        fetchPackages(); // Update the package log
-        setItemCount(1); // Reset the item count to 1
-        setProviderDescription(""); // Clear the additional information
-      })
-      .catch(err => {
-        console.error('Error sending package data:', err);
-      });
-  };
-
   const handleSendEmailWithChosenEmail = () => {
     const packageData = {
       LecturerEmail: selectedEmail,
@@ -142,7 +158,6 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       AdditionalInfo: providerDescription,
       CollectionDate: new Date(),
     };
-
     fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -152,25 +167,40 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         if (!res.ok) throw new Error('Error sending package data with chosen email');
         return res.json();
       })
-      .then(data => {
-        alert("Package record created successfully. Email sent to chosen lecturer.");
-        fetchPackages(); // Update the package log
-        setItemCount(1); // Reset the item count to 1
-        setProviderDescription(""); // Clear the additional information
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'success', message: 'Email sent to', lecturer: selectedEmail }
+        }));
+        fetchPackages();
+        setItemCount(1);
+        setProviderDescription('');
       })
-      .catch(err => {
-        console.error('Error sending package data with chosen email:', err);
+      .catch(() => {
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'error', message: 'Failed to create package record.' }
+        }));
       });
   };
 
+  useEffect(() => { localStorage.setItem('shippingProvider', shippingProvider); }, [shippingProvider]);
+  useEffect(() => { localStorage.setItem('itemCount', String(itemCount)); }, [itemCount]);
+
   return (
     <div className="email-selector">
-      {/* Send Email/Log Information section above email selection */}
       <div className="send-email-section">
-        {loading && <p>Processing... Please wait.</p>} {/* Show loading indicator */}
-        {error && <p style={{ color: 'red' }}>{error}</p>} {/* Show error message */}
+        {loading && <p className="status-info">Processing... Please wait.</p>}
+        {error && <p className="status-error">{error}</p>}
         {!loading && recognizedEmail && (
-          <p>Suggested Lecturer Email: {recognizedEmail}</p>
+          <p className="status-info">
+            Suggested Lecturer Email: {recognizedEmail}{' '}
+            <button
+              className="btn"
+              onClick={() => { navigator.clipboard.writeText(recognizedEmail); window.dispatchEvent(new CustomEvent('toast',{detail:{type:'info',message:'Copied to clipboard'}})); }}
+              style={{ marginLeft: 8 }}
+            >
+              Copy
+            </button>
+          </p>
         )}
         <button onClick={handleSendEmail}>Send Email/Log Information</button>
       </div>
@@ -179,11 +209,80 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       <div className="email-container">
         <div className="email-select">
           <h2>Choose an Email</h2>
-          <select value={selectedEmail} onChange={e => setSelectedEmail(e.target.value)}>
-            {emails.map((email, index) => (
-              <option key={index} value={email}>{email}</option>
-            ))}
-          </select>
+
+          {/* Typeahead statt <select> */}
+          <div
+            className="typeahead"
+            role="combobox"
+            aria-expanded={showSuggestions}
+            aria-owns="email-suggestions"
+            aria-haspopup="listbox"
+          >
+            <input
+              type="text"
+              className="typeahead-input"
+              placeholder="Start typing an email..."
+              value={selectedEmail}
+              onChange={(e) => {
+                setSelectedEmail(e.target.value);
+                setShowSuggestions(true);
+                setActiveIndex(-1);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              onKeyDown={(e) => {
+                if (!showSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                  setShowSuggestions(true);
+                  return;
+                }
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setActiveIndex((i) => Math.max(i - 1, 0));
+                } else if (e.key === 'Enter') {
+                  if (activeIndex >= 0 && suggestions[activeIndex]) {
+                    setSelectedEmail(suggestions[activeIndex]);
+                  }
+                  setShowSuggestions(false);
+                } else if (e.key === 'Escape') {
+                  setShowSuggestions(false);
+                }
+              }}
+            />
+            {showSuggestions && (
+              <ul id="email-suggestions" className="typeahead-dropdown" role="listbox">
+                {suggestions.length === 0 && (
+                  <li className="typeahead-empty">No matches</li>
+                )}
+                {suggestions.map((s, idx) => {
+                  const q = (selectedEmail || '').toLowerCase();
+                  const i = s.toLowerCase().indexOf(q);
+                  const before = i >= 0 ? s.slice(0, i) : s;
+                  const match  = i >= 0 ? s.slice(i, i + q.length) : '';
+                  const after  = i >= 0 ? s.slice(i + q.length) : '';
+                  return (
+                    <li
+                      key={s}
+                      role="option"
+                      aria-selected={idx === activeIndex}
+                      className={`typeahead-item ${idx === activeIndex ? 'active' : ''}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSelectedEmail(s);
+                        setShowSuggestions(false);
+                      }}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                    >
+                      {i >= 0 ? (<>{before}<mark className="typeahead-mark">{match}</mark>{after}</>) : s}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
           <button onClick={handleDeleteEmail}>Delete chosen E-Mail</button>
         </div>
 
@@ -229,16 +328,16 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         </div>
       </div>
 
-      {/* Additional Information Box and new send button under it */}
-      <div className="additional-info-section" style={{ marginTop: '20px', textAlign: 'center' }}>
+      {/* Additional Information */}
+      <div className="additional-info-section">
         <h4>Additional Information</h4>
         <textarea
           placeholder="Type your custom information here..."
           value={providerDescription}
           onChange={e => setProviderDescription(e.target.value)}
-          style={{ width: '90%', height: '60px', padding: '0.5em', borderRadius: '4px', border: '1px solid #ccc' }}
-        ></textarea>
-        <button onClick={handleSendEmailWithChosenEmail} style={{ marginTop: '10px' }}>
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSendEmailWithChosenEmail(); } }}
+        />
+        <button onClick={handleSendEmailWithChosenEmail}>
           Send Email/Log Information (Chosen Email)
         </button>
       </div>

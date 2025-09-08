@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision;
 using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
 using Microsoft.Extensions.Configuration;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using WebApplication1.Services;
 
 namespace WebApplication1.Backend.Controllers
 {
@@ -18,12 +20,14 @@ namespace WebApplication1.Backend.Controllers
         private readonly string subscriptionKey;
         private readonly string endpoint;
         private readonly bool isStudentAccount;
+        private readonly ImagePreprocessor _pre;
 
-        public ImageController(IConfiguration configuration)
+        public ImageController(IConfiguration configuration, ImagePreprocessor pre)
         {
             subscriptionKey = configuration["AzureComputerVision:SubscriptionKey"];
             endpoint = configuration["AzureComputerVision:Endpoint"];
             isStudentAccount = bool.Parse(configuration["AzureAccount:IsStudentAccount"]);
+            _pre = pre;
         }
 
         [HttpPost("upload")]
@@ -32,17 +36,14 @@ namespace WebApplication1.Backend.Controllers
             if (image == null || image.Length == 0)
                 return BadRequest("No image uploaded.");
 
-            // Preprocess the image
             using (var inputStream = image.OpenReadStream())
             using (var outputStream = new MemoryStream())
             {
-                // Load the image using ImageSharp
                 var img = await Image.LoadAsync<Rgba32>(inputStream);
 
-                // Check if the image is too large and resize if necessary (only for student accounts)
+                // Resize for student accounts to keep quota in check
                 const int maxWidth = 1024;
                 const int maxHeight = 768;
-
                 if (isStudentAccount && (img.Width > maxWidth || img.Height > maxHeight))
                 {
                     img.Mutate(x => x.Resize(new ResizeOptions
@@ -50,23 +51,16 @@ namespace WebApplication1.Backend.Controllers
                         Mode = ResizeMode.Max,
                         Size = new Size(maxWidth, maxHeight)
                     }));
-                    Console.WriteLine($"Image resized to: {img.Width}x{img.Height}");
                 }
 
-                // Additional preprocessing steps
-                img.Mutate(x =>
-                {
-                    x.AutoOrient(); // Correct orientation
-                    x.Contrast(1.2f); // Increase contrast
-                    x.Brightness(1.1f); // Slightly increase brightness
-                    x.Grayscale(); // Convert to grayscale
-                });
+                // Normalize + Auto-crop
+                _pre.Normalize(img);
+                _pre.AutoCrop(img, backgroundThreshold: 245, padding: 12);
 
-                // Save the processed image to a memory stream
+                // Save processed image to stream
                 await img.SaveAsJpegAsync(outputStream);
                 outputStream.Seek(0, SeekOrigin.Begin);
 
-                // Send the processed image to Azure OCR
                 var client = new ComputerVisionClient(new ApiKeyServiceClientCredentials(subscriptionKey))
                 {
                     Endpoint = endpoint
@@ -75,11 +69,10 @@ namespace WebApplication1.Backend.Controllers
                 var result = await client.ReadInStreamAsync(outputStream);
                 var operationId = result.OperationLocation.Split('/').Last();
 
-                // Poll for the result
                 ReadOperationResult readResult;
                 do
                 {
-                    await Task.Delay(1000);
+                    await Task.Delay(800);
                     readResult = await client.GetReadResultAsync(Guid.Parse(operationId));
                 } while (readResult.Status == OperationStatusCodes.Running || readResult.Status == OperationStatusCodes.NotStarted);
 

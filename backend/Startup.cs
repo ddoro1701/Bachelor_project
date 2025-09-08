@@ -20,10 +20,12 @@ namespace WebApplication1
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddControllersWithViews();
             services.AddSingleton<EmailService>();
             services.AddSingleton<LecturerService>();
             services.AddSingleton<LecturerMatcher>();  // if using LecturerMatcher that depends on LecturerService
             services.AddSingleton<PackageService>();  // Register the PackageService
+            services.AddSingleton<WebApplication1.Services.ImagePreprocessor>(); // add
 
             services.AddControllers().AddJsonOptions(options =>
             {

@@ -117,7 +117,7 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
             .map(row => row.original.id);
 
         if (collectedEntries.length === 0) {
-            alert('No collected entries found in current view.');
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: 'No collected entries in current view.' } }));
             return;
         }
         if (!window.confirm(`Are you sure you want to delete ${collectedEntries.length} collected entries?`)) {
@@ -135,77 +135,80 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
             .then(() => {
                 if (typeof onDeleteCollected === "function") {
                     onDeleteCollected(collectedEntries);
-                } else {
-                    alert('Collected entries deleted.');
                 }
+                window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Collected entries deleted.' } }));
             })
             .catch(err => {
                 console.error('Error deleting collected entries:', err);
-                alert('Error deleting collected entries, check console for details.');
+                window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: 'Error deleting collected entries.' } }));
             });
     };
 
     return (
-        <div>
-            <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                    {headerGroups.map(headerGroup => (
-                        <tr {...headerGroup.getHeaderGroupProps()} style={{ borderBottom: '2px solid #ccc' }}>
-                            {headerGroup.headers.map(column => (
-                                <th
-                                    {...column.getHeaderProps(column.getSortByToggleProps())}
-                                    style={{
-                                        padding: '12px',
-                                        backgroundColor: '#f2f2f2',
-                                        textAlign: 'center',
-                                        fontWeight: 'bold',
-                                        color: '#333',
-                                        borderRight: '1px solid #ddd'
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {column.render('Header') === 'Action' ? '' : column.render('Header')}
-                                        <span style={{ fontSize: '0.8em' }}>
-                                            {column.isSorted ? (column.isSortedDesc ? ' 🔽' : ' 🔼') : ''}
-                                        </span>
-                                    </div>
-                                    {column.canFilter ? (
-                                        <div style={{ marginTop: 6 }}>{column.render('Filter')}</div>
-                                    ) : null}
-                                </th>
-                            ))}
-                        </tr>
-                    ))}
-                </thead>
-                <tbody {...getTableBodyProps()}>
-                    {page.map(row => {
-                        prepareRow(row);
-                        const status = row.original.status;
-                        const rowClass = status === 'Collected'
-                            ? 'row-collected'
-                            : status === 'Received'
-                                ? 'row-received'
-                                : '';
-                        return (
-                            <tr {...row.getRowProps()} className={rowClass}>
-                                {row.cells.map(cell => (
-                                    <td {...cell.getCellProps()}>
-                                        {cell.render('Cell')}
-                                    </td>
+        <div className="table-card card">
+            <div className="table-wrapper">
+                <table {...getTableProps()}>
+                    <thead>
+                        {headerGroups.map(headerGroup => (
+                            <tr {...headerGroup.getHeaderGroupProps()}>
+                                {headerGroup.headers.map(column => (
+                                    <th {...column.getHeaderProps()}>
+                                        <div className="th-head">
+                                            <span className="th-title">
+                                                {column.render('Header') === 'Action' ? '' : column.render('Header')}
+                                            </span>
+                                            {/* Sort nur über Icon-Button */}
+                                            {column.render('Header') !== 'Action' && (
+                                                <button
+                                                    className="sort-btn"
+                                                    {...column.getSortByToggleProps()}
+                                                    title={column.isSorted ? (column.isSortedDesc ? 'Sorted desc' : 'Sorted asc') : 'Sort'}
+                                                >
+                                                    {column.isSorted ? (column.isSortedDesc ? '▼' : '▲') : '↕'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {column.canFilter ? (
+                                            <div className="th-filter">{column.render('Filter')}</div>
+                                        ) : null}
+                                    </th>
                                 ))}
                             </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                        ))}
+                    </thead>
+                    <tbody {...getTableBodyProps()}>
+                        {page.map(row => {
+                            prepareRow(row);
+                            const status = row.original.status;
+                            const rowClass = status === 'Collected'
+                                ? 'row-collected'
+                                : status === 'Received'
+                                    ? 'row-received'
+                                    : '';
+                            return (
+                                <tr {...row.getRowProps()} className={rowClass}>
+                                    {row.cells.map(cell => (
+                                        <td
+                                            {...cell.getCellProps()}
+                                            data-label={cell.column.Header}   // für Mobile Cards
+                                        >
+                                            {cell.render('Cell')}
+                                        </td>
+                                    ))}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
 
             <div className="table-controls">
                 <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
                 <button onClick={() => previousPage()} disabled={!canPreviousPage}>Previous</button>
-                <button onClick={() => nextPage()} disabled={!canNextPage}>Next</button>
-                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
-                <span>Page <strong>{pageIndex + 1} of {pageOptions.length}</strong></span>
+
+                {/* Page-Size Select zwischen Previous und Next, schmal */}
                 <select
+                    className="page-size"
                     value={pageSize}
                     onChange={e => {
                         setPageSize(Number(e.target.value));
@@ -218,6 +221,12 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                         </option>
                     ))}
                 </select>
+
+                <button onClick={() => nextPage()} disabled={!canNextPage}>Next</button>
+                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
+
+                <span>Page <strong>{pageIndex + 1} of {pageOptions.length}</strong></span>
+
                 <button onClick={exportToExcel}>Export to Excel</button>
                 <button onClick={handleDeleteCollected}>Delete Collected</button>
             </div>

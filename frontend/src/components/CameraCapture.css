@@ -1,0 +1,37 @@
+.camera-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center; z-index: 10000;
+}
+.camera-sheet {
+  width: min(96vw, 720px);
+  background: linear-gradient(180deg, var(--card) 0%, #0a1020 100%);
+  border: 1px solid var(--card-border);
+  border-radius: 14px; box-shadow: var(--shadow);
+  padding: 12px; text-align: center;
+}
+.camera-frame {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  border-radius: 12px; overflow: hidden;
+  background: #000;
+}
+.camera-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.guides .grid {
+  position: absolute; background: rgba(255,255,255,.15);
+}
+.guides .v1 { top: 0; bottom: 0; width: 1px; left: 33.33%; }
+.guides .v2 { top: 0; bottom: 0; width: 1px; left: 66.66%; }
+.guides .h1 { left: 0; right: 0; height: 1px; top: 33.33%; }
+.guides .h2 { left: 0; right: 0; height: 1px; top: 66.66%; }
+.corners { position: absolute; width: 28px; height: 28px; border: 2px solid #3b82f6; }
+.corners.tl { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+.corners.tr { top: 10px; right: 10px; border-left: 0; border-bottom: 0; }
+.corners.bl { bottom: 10px; left: 10px; border-right: 0; border-top: 0; }
+.corners.br { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+.camera-controls { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+.camera-controls button {
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-700) 100%);
+  color:#fff; border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:10px; cursor:pointer;
+}
+.camera-error { color: #fca5a5; margin-top: 8px; font-weight: 600; }

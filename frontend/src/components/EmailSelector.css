@@ -9,20 +9,32 @@
 
 .send-email-section {
   margin-bottom: 20px;
-  padding: 1em;
-  border: 1px solid #ccc;
-  text-align: center;
-  text-align: left;
   border-radius: var(--radius);
   border: 1px solid var(--card-border);
   background: linear-gradient(180deg, var(--card) 0%, #0a1020 100%);
   box-shadow: var(--shadow);
   padding: 16px;
+
+  /* Neu: sauber zentriert */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .send-email-section p {
   margin: 0.5em 0;
   color: var(--muted);
+}
+
+/* Statusfarben */
+.status-error {
+  color: #fca5a5;
+  font-weight: 600;
+}
+.status-info {
+  color: #cbd5e1;
+  font-weight: 500;
 }
 
 .send-email-section button {
@@ -116,6 +128,62 @@
 .additional-info-section button {
   width: 100%;
   margin-top: 12px !important;
+}
+
+/* Typeahead */
+.typeahead { position: relative; width: 100%; }
+.typeahead-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #0a1224;
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.typeahead-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(59,130,246,.2);
+}
+.typeahead-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: linear-gradient(180deg, var(--card) 0%, #0a1020 100%);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 240px;
+  overflow: auto;
+  z-index: 50;
+  padding: 6px;
+}
+.typeahead-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.typeahead-item:hover,
+.typeahead-item.active {
+  background: rgba(59,130,246,.12);
+}
+.typeahead-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+}
+.typeahead-mark {
+  background: rgba(59,130,246,.25);
+  color: #fff;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+/* Auf kleinen Screens etwas kompakter */
+@media (max-width: 720px) {
+  .typeahead-input { padding: 9px 10px; }
+  .typeahead-item { padding: 7px 9px; }
 }
 
 /* Mobile */
