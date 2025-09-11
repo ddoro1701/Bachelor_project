@@ -210,11 +210,58 @@ tbody tr:hover {
   .badge { padding: 2px 6px; font-size: 10px; }
 }
 
-/* Tabellen-Wrapper für horizontales Scrollen als Fallback */
+/* Let wide tables scroll on mobile (iOS momentum scroll) */
 .table-wrapper {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* Use compact card layout up to ~iPhone landscape width */
+@media (max-width: 920px) {
+  table { border: none; background: transparent; box-shadow: none; }
+  thead { display: none; }
+  tbody tr {
+    display: block;
+    background: linear-gradient(180deg, var(--card) 0%, #0a1020 100%);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin: 8px 0;
+    padding: 4px 0;
+  }
+  tbody td {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px;
+    border: none;
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  tbody td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 600;
+  }
+}
+
+/* Extra-tight layout for small-height landscape (iPhone) */
+@media (orientation: landscape) and (max-height: 480px) {
+  .App-header { padding: .75em .6em; }
+  .brand h1 { font-size: 18px; }
+  .subtitle { display: none; }
+  .table-controls { gap: 6px; }
+  .table-controls button,
+  .table-controls .page-size { padding: 6px 8px; font-size: 13px; }
+  tbody tr { margin: 6px 0; }
+  tbody td { grid-template-columns: 92px 1fr; padding: 6px 8px; font-size: 13px; gap: 4px; }
+  /* Don’t cover content with the footer on tiny heights */
+  footer { position: static; }
+}
+
+/* Respect safe area on iOS */
+body { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0)); }
 
 /* Toasts */
 .toast-container {
@@ -303,3 +350,105 @@ tbody tr:hover {
   border-color: rgba(59,130,246,.55);
   background: linear-gradient(180deg, rgba(23,37,84,.5) 0%, rgba(7,16,45,.35) 100%);
 }
+
+/* App-Footer */
+.site-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  background: #0b1220;
+  color: var(--muted);
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding: 12px 16px;
+  font-size: 0.9em;
+  z-index: 1000;
+}
+
+/* Layout: Footer nur am Seitenende (sichtbar erst beim Runterscrollen) */
+html, body { height: 100%; }
+#root, #root > div { min-height: 100vh; display: flex; flex-direction: column; }
+.site-footer { 
+  position: static;          /* statt fixed */
+  bottom: auto; left: auto; right: auto;
+  z-index: auto;
+  margin-top: auto;          /* schiebt Footer ans Ende der Seite */
+}
+
+/* Falls es unten Padding für den fixen Footer gab: entfernen */
+body { padding-bottom: 0 !important; }
+
+/* Status-Pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  letter-spacing: .2px;
+}
+.status-pill .status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
+}
+.status-pill.collected {
+  color: #16a34a;
+  border-color: rgba(22,163,74,.35);
+  background: linear-gradient(180deg, rgba(6,78,59,.25) 0%, rgba(2,44,34,.2) 100%);
+}
+.status-pill.collected .status-dot { background: #22c55e; }
+.status-pill.received {
+  color: #f59e0b;
+  border-color: rgba(245,158,11,.35);
+  background: linear-gradient(180deg, rgba(88,56,10,.25) 0%, rgba(60,32,8,.2) 100%);
+}
+.status-pill.received .status-dot { background: #fbbf24; }
+
+/* QR-Indikator (kein extra Spalte) */
+.qr-flag {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px; padding: 1px 6px;
+  font-size: .75em; border-radius: 9999px;
+  color: #93c5fd; border: 1px solid rgba(59,130,246,.35);
+  background: linear-gradient(180deg, rgba(23,37,84,.35) 0%, rgba(7,16,45,.25) 100%);
+}
+.qr-flag .qr-ico { width: 14px; height: 14px; }
+.qr-flag .qr-ts { opacity: .9; }
+
+/* Action-Button klarer differenzieren */
+.btn.action {
+  padding: .45rem .8rem; border-radius: 8px; font-weight: 600;
+  border: 1px solid transparent; transition: filter .15s ease;
+}
+.btn.action.make-collected {
+  color: #fff; background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  border-color: rgba(34,197,94,.75);
+}
+.btn.action.make-collected:hover { filter: brightness(1.05); }
+.btn.action.make-received {
+  color: #fff; background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: rgba(245,158,11,.75);
+}
+.btn.action.make-received:hover { filter: brightness(1.05); }
+
+/* Entferne den alten fixed Footer-Block, falls noch vorhanden */
+.site-footer { position: static; margin-top: auto; }
+.cn-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.cn-modal {
+  width: min(520px, 92vw);
+  background: #111827; color: #e5e7eb;
+  border: 1px solid #374151; border-radius: 10px;
+  padding: 16px 18px; box-shadow: 0 8px 30px rgba(0,0,0,.35);
+}
+.cn-title { font-weight: 700; margin-bottom: 8px; }
+.cn-title.warning { color: #fbbf24; }
+.cn-body { margin: 6px 0 12px; }
+.cn-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { padding: .5rem .85rem; border-radius: 8px; border: 1px solid transparent; background: #334155; color: #fff; }
+.btn.ghost { background: transparent; border-color: #475569; color: #e5e7eb; }
+.btn.danger { background: #dc2626; border-color: #ef4444; }

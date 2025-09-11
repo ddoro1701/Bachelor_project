@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Reception - Package Lookup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font:16px/1.4 system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e5e7eb;padding:24px}
+    .card{max-width:720px;margin:0 auto;background:#111827;border:1px solid #374151;border-radius:8px;padding:20px}
+    .row{display:flex;gap:16px;margin:.25rem 0}
+    .row b{min-width:180px;display:inline-block;color:#9ca3af}
+    .btn{padding:.5rem .9rem;border:1px solid #2563eb;background:#1d4ed8;color:#fff;border-radius:6px;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .msg{margin:.5rem 0}
+    img{max-width:280px;border:1px solid #374151;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Package Lookup</h2>
+    <div id="msg" class="msg"></div>
+    <div id="content" style="display:none">
+      <div class="row"><b>Lecturer</b><span id="lec"></span></div>
+      <div class="row"><b>Email</b><span id="email"></span></div>
+      <div class="row"><b>Items</b><span id="items"></span></div>
+      <div class="row"><b>Provider</b><span id="prov"></span></div>
+      <div class="row"><b>Info</b><span id="info"></span></div>
+      <div class="row"><b>Collection</b><span id="col"></span></div>
+      <div class="row"><b>Status</b><span id="status"></span></div>
+      <div class="row"><b>Label</b><span><img id="img" alt=""></span></div>
+      <div class="row"><button id="collect" class="btn">Mark as Collected</button></div>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const token = qs.get('token');
+    const apiBase = location.origin + '/api';
+    const KEY_NAME = 'reception_staff_key';
+
+    const msg = (t, ok=false) => { const el = document.getElementById('msg'); el.style.color = ok ? '#22c55e' : '#f87171'; el.textContent = t; };
+
+    async function ensureStaffKey() {
+      let k = localStorage.getItem(KEY_NAME);
+      if (!k) {
+        k = prompt('Enter staff code to confirm pickup');
+        if (!k) return null;
+        localStorage.setItem(KEY_NAME, k);
+      }
+      return k;
+    }
+
+    async function autoCollect() {
+      const key = await ensureStaffKey();
+      if (!key) { msg('Staff code required.'); return; }
+      const r = await fetch(`${apiBase}/package/auto-collect?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'X-Staff-Key': key }
+      });
+      if (r.ok) {
+        document.getElementById('status').textContent = 'Collected';
+        msg('Auto-collected', true);
+      } else if (r.status === 401) {
+        msg('Invalid staff code.');
+      } else if (r.status === 404) {
+        msg('Invalid or expired token.');
+      } else {
+        msg('Failed to auto-collect.');
+      }
+    }
+
+    async function load() {
+      if (!token) { msg('Missing token'); return; }
+      try {
+        const r = await fetch(`${apiBase}/package/lookup?token=${encodeURIComponent(token)}`);
+        if (!r.ok) { msg('Invalid or expired token.'); return; }
+        const p = await r.json();
+        document.getElementById('content').style.display = '';
+        document.getElementById('lec').textContent = `${p.lecturerFirstName||''} ${p.lecturerLastName||''}`.trim() || '—';
+        document.getElementById('email').textContent = p.lecturerEmail || '—';
+        document.getElementById('items').textContent = p.itemCount ?? '—';
+        document.getElementById('prov').textContent = p.shippingProvider || '—';
+        document.getElementById('info').textContent = p.additionalInfo || '—';
+        document.getElementById('col').textContent = p.collectionDate ? new Date(p.collectionDate).toLocaleString() : '—';
+        document.getElementById('status').textContent = p.status || '—';
+
+        // Auto-collect for staff
+        await autoCollect();
+      } catch {
+        msg('Lookup failed');
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
+using System;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-using System;
 
 namespace WebApplication1.Models
 {
@@ -8,25 +8,44 @@ namespace WebApplication1.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string? Id { get; set; } // Auto-generated
+        public string? Id { get; set; }
 
-        [BsonElement("Lecturer_Email")]
-        public string LecturerEmail { get; set; } = string.Empty;
+        public string? LecturerEmail { get; set; }
+        public string? LecturerFirstName { get; set; }
+        public string? LecturerLastName { get; set; }
 
-        [BsonElement("ItemCount")]
         public int ItemCount { get; set; }
+        public string? ShippingProvider { get; set; }
+        public string? AdditionalInfo { get; set; }
 
-        [BsonElement("ShippingProvider")]
-        public string? ShippingProvider { get; set; } = string.Empty;
-
-        [BsonElement("AdditionalInfo")]
-        public string? AdditionalInfo { get; set; } = string.Empty;
-
-        [BsonElement("CollectionDate")]
-        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)] // Ensure UTC format
+        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]
         public DateTime? CollectionDate { get; set; }
 
-        [BsonElement("Status")]
         public string? Status { get; set; }
+        public string? ImageUrl { get; set; }
+
+        // QR
+        [BsonElement("QrToken")]
+        public string? QrToken { get; set; }
+
+        [BsonElement("QrExpiresAt")]
+        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]
+        public DateTime? QrExpiresAt { get; set; }
+
+        [BsonElement("QrUsedAt")]
+        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]
+        public DateTime? QrUsedAt { get; set; }
+
+        // PIN (falls genutzt)
+        [BsonElement("PinCode")]
+        public string? PinCode { get; set; }
+
+        [BsonElement("PinExpiresAt")]
+        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]
+        public DateTime? PinExpiresAt { get; set; }
+
+        [BsonElement("PinUsedAt")]
+        [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]
+        public DateTime? PinUsedAt { get; set; }
     }
 }

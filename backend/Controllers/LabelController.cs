@@ -16,15 +16,33 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("find-email")]
-        public async Task<IActionResult> FindEmail([FromBody] string ocrText)
+        public async Task<IActionResult> FindEmail([FromBody] System.Text.Json.JsonElement payload)
         {
-            if (string.IsNullOrWhiteSpace(ocrText))
+            string? text = null;
+            List<string>? lines = null;
+
+            if (payload.ValueKind == System.Text.Json.JsonValueKind.String)
             {
-                return BadRequest("OCR text is empty. Please upload an image to generate OCR text.");
+                text = payload.GetString();
+            }
+            else if (payload.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                if (payload.TryGetProperty("text", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String)
+                    text = t.GetString();
+
+                if (payload.TryGetProperty("lines", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    lines = new List<string>();
+                    foreach (var el in arr.EnumerateArray())
+                        if (el.ValueKind == System.Text.Json.JsonValueKind.String)
+                            lines.Add(el.GetString()!);
+                }
             }
 
-            // Process the OCR text and use LecturerMatcher to determine the email.
-            var email = await _matcher.FindLecturerEmailAsync(ocrText);
+            if (string.IsNullOrWhiteSpace(text))
+                return BadRequest("OCR text is empty. Please upload an image to generate OCR text.");
+
+            var email = await _matcher.FindLecturerEmailAsync(text!, lines);
             return email == null
                    ? NotFound("Kein passendes Lecturer-Email gefunden.")
                    : Ok(new { email });

@@ -18,44 +18,76 @@ namespace WebApplication1.Services
             _emailClient = new EmailClient(connectionString);
         }
 
-               public async Task SendPackageEmailAsync(string toEmail, string subject, int itemCount, string shippingProvider, string additionalInfo)
+        private static string FormatUkDateTime(DateTime utc)
         {
             try
             {
-                // Format the email body with package details
+#if WINDOWS
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time");
+#else
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+#endif
+                var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
+                return local.ToString("dd.MM.yyyy HH:mm");
+            }
+            catch
+            {
+                return DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToString("yyyy-MM-dd HH:mm 'UTC'");
+            }
+        }
+
+        public async Task SendPackageEmailAsync(
+            string toEmail,
+            string subject,
+            int itemCount,
+            string shippingProvider,
+            string additionalInfo,
+            DateTime collectionDateUtc,
+            string? imageUrl = null,
+            string? qrLink = null,
+            string? qrImageDataUri = null) // ensure params exist
+        {
+            try
+            {
+                var when = FormatUkDateTime(collectionDateUtc);
+
+                var qrHtml = string.IsNullOrWhiteSpace(qrLink) ? "" :
+$@"<p><strong>Reception Link (QR):</strong><br/>
+<a href=""{qrLink}"">{qrLink}</a><br/>
+{(string.IsNullOrWhiteSpace(qrImageDataUri) ? "" : $@"<img src=""{qrImageDataUri}"" alt=""QR"" style=""width:200px;height:200px;margin-top:6px;"" />")}
+</p>";
+
+                var imageHtml = string.IsNullOrWhiteSpace(imageUrl) ? "" :
+$@"<p><strong>Label Image:</strong><br/>
+<a href=""{imageUrl}"" target=""_blank"">{imageUrl}</a><br/>
+<img src=""{imageUrl}"" alt=""Label Image"" style=""max-width:480px;height:auto;border:1px solid #ddd;border-radius:4px;margin-top:6px;"" />
+</p>";
+
                 var emailBody = $@"
-                <html>
-                    <body>
-                        <h1>{subject}</h1>
-                        <p><strong>Lecturer Email:</strong> {toEmail}</p>
-                        <p><strong>Item Count:</strong> {itemCount}</p>
-                        <p><strong>Shipping Provider:</strong> {shippingProvider}</p>
-                        <p><strong>Additional Information:</strong> {additionalInfo}</p>
-                        <p>Opening Hours:</p>
-                        <p>10am - 12pm</p>
-                        <p>2pm - 3pm</p>
-                        
-                        <p>Closed for Lunch</p>
-                        <p>12pm - 2pm</p>
+<html><body>
+  <h1>{subject}</h1>
+  <p><strong>Lecturer Email:</strong> {toEmail}</p>
+  <p><strong>Item Count:</strong> {itemCount}</p>
+  <p><strong>Shipping Provider:</strong> {shippingProvider}</p>
+  <p><strong>Additional Information:</strong> {additionalInfo}</p>
+  <p><strong>Collection Date/Time:</strong> {FormatUkDateTime(collectionDateUtc)}</p>
+  {imageHtml}
+  {qrHtml}
+</body></html>";
 
-                        <p>Outgoing mail <strong>NO</strong> later than 2.30pm</p>
-
-
-
-                        <p>Thank you for your cooperation.</p>
-                        <p>Best regards,</p>
-                        
-                    </body>
-                </html>";
-
-                // Create the email content
                 var emailContent = new EmailContent(subject)
                 {
-                    PlainText = $"Lecturer Email: {toEmail}\nItem Count: {itemCount}\nShipping Provider: {shippingProvider}\nAdditional Information: {additionalInfo}",
+                    PlainText =
+$@"Lecturer Email: {toEmail}
+Item Count: {itemCount}
+Shipping Provider: {shippingProvider}
+Additional Information: {additionalInfo}
+Collection Date/Time: {FormatUkDateTime(collectionDateUtc)}
+{(string.IsNullOrWhiteSpace(imageUrl) ? "" : $"Label Image: {imageUrl}")}
+{(string.IsNullOrWhiteSpace(qrLink) ? "" : $"Reception Link: {qrLink}")}",
                     Html = emailBody
                 };
 
-                // Create the email message
                 var emailMessage = new EmailMessage(
                     senderAddress: "DoNotReply@c82bcbff-b02e-4e6f-af44-059a9fd518f9.azurecomm.net",
                     content: emailContent,

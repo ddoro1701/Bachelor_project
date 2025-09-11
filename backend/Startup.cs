@@ -20,31 +20,18 @@ namespace WebApplication1
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddControllersWithViews();
+            services.AddControllers()
+                .AddJsonOptions(o => {
+                    o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                    o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+                });
+
+            // Services registrieren
             services.AddSingleton<EmailService>();
+            services.AddSingleton<TextPreprocessor>();
             services.AddSingleton<LecturerService>();
-            services.AddSingleton<LecturerMatcher>();  // if using LecturerMatcher that depends on LecturerService
-            services.AddSingleton<PackageService>();  // Register the PackageService
-            services.AddSingleton<WebApplication1.Services.ImagePreprocessor>(); // add
-
-            services.AddControllers().AddJsonOptions(options =>
-            {
-                options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-                options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-                // Ensure ISO 8601 formatting (default) and UTC handling.
-                options.JsonSerializerOptions.WriteIndented = true;
-            });
-
-            services.AddCors(options =>
-            {
-                options.AddPolicy(
-                    "AllowAll",
-                    builder =>
-                    {
-                        builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-                    }
-                );
-            });
+            services.AddSingleton<PackageService>();
+            services.AddSingleton<LecturerMatcher>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -62,13 +49,12 @@ namespace WebApplication1
             // app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseRouting();
-            app.UseCors("AllowAll");
-            app.UseAuthorization();
+            app.UseStaticFiles();
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapControllers();
-                endpoints.MapFallbackToFile("index.html"); // For client-side routing
+                endpoints.MapControllers();                 // map API first
+                endpoints.MapFallbackToFile("index.html");  // SPA fallback for GET
             });
         }
     }

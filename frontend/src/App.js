@@ -10,6 +10,7 @@ function App() {
     const [text, setText] = useState('');
     const [cameraOpen, setCameraOpen] = useState(false);
     const [packages, setPackages] = useState([]);
+    const [rawImageUrl, setRawImageUrl] = useState('');
 
     const uploadFormData = async (formData) => {
       const response = await fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/image/upload', {
@@ -18,8 +19,9 @@ function App() {
       });
       if (!response.ok) throw new Error('Error uploading image');
       const result = await response.json();
-      console.log("OCR Text from /api/image/upload:", result.text);
       setText(result.text);
+      setRawImageUrl(result.rawImageUrl || '');
+      window.lastRawImageUrl = result.rawImageUrl || ''; // fallback für andere Komponenten
     };
 
     const handleImageUpload = async (event) => {
@@ -48,12 +50,15 @@ function App() {
     };
 
     const fetchPackages = useCallback(() => {
-        fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/all')
-            .then(res => res.json())
-            .then(data => {
-                setPackages(data);
-            })
-            .catch(err => console.error('Error fetching packages:', err));
+      fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/all')
+        .then(async res => {
+          if (!res.ok) return [];
+          const ct = res.headers.get('content-type') || '';
+          if (!ct.includes('application/json')) return [];
+          return res.json();
+        })
+        .then(data => Array.isArray(data) ? setPackages(data) : setPackages([]))
+        .catch(() => setPackages([]));
     }, []);
 
     useEffect(() => {
@@ -83,10 +88,16 @@ function App() {
                     <button className="btn" onClick={() => setCameraOpen(true)}>Use Camera</button>
                 </div>
             </header>
+
             <main className="App-main">
                 <EmailSelector ocrText={text} fetchPackages={fetchPackages} />
                 <PackageLog packages={packages} fetchPackages={fetchPackages} />
             </main>
+
+            {/* Neuer Footer */}
+            <footer className="site-footer">
+              <p>&copy; {new Date().getFullYear()} Wrexham University Package Management System</p>
+            </footer>
         </div>
     );
 }

@@ -3,12 +3,18 @@ import './EmailSelector.css';
 
 const EmailSelector = ({ ocrText, fetchPackages }) => {
   const [emails, setEmails] = useState([]);
-  const [fullName, setFullName] = useState('');
+  // REMOVE: const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName,  setLastName]  = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [selectedEmail, setSelectedEmail] = useState('');
   const [recognizedEmail, setRecognizedEmail] = useState('');
   const [shippingProvider, setShippingProvider] = useState(() => localStorage.getItem('shippingProvider') || 'Amazon');
   const [itemCount, setItemCount] = useState(() => Number(localStorage.getItem('itemCount') || 1));
+
+  // FIX: add missing state
+  const [providerDescription, setProviderDescription] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,14 +46,12 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
   useEffect(() => {
     console.log("[EmailSelector] useEffect triggered with OCR text:", ocrText);
     if (ocrText && ocrText.trim()) {
-      setLoading(true); // Start loading
-      setError(''); // Clear previous errors
-      console.log("Calling /api/label/find-email with OCR text:", ocrText);
-
+      setLoading(true);
+      setError('');
       fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/label/find-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ocrText),
+        body: JSON.stringify({ text: ocrText, lines: (window.lastOcrLines || []) }) // falls App die lines speichert
       })
         .then(res => {
           if (res.status === 404) {
@@ -83,6 +87,8 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       ShippingProvider: shippingProvider,
       AdditionalInfo: providerDescription,
       CollectionDate: new Date(),
+      // NEW: unverarbeitetes Bild aus dem letzten Upload
+      ImageUrl: window.lastRawImageUrl || ''
     };
     fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
       method: 'POST',
@@ -108,12 +114,18 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       });
   };
 
+  // Replace handleAddEmail to use FirstName/LastName
   const handleAddEmail = () => {
-    if (!newEmail.trim() || !fullName.trim()) {
-      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: 'Please provide full name and email.' } }));
+    if (!firstName.trim() || !lastName.trim() || !newEmail.trim()) {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: 'Please enter first name, last name and email.' } }));
       return;
     }
-    const lecturerData = { Name: fullName, Email: newEmail };
+    const lecturerData = {
+      FirstName: firstName.trim(),
+      LastName: lastName.trim(),
+      Email: newEmail.trim()
+    };
+
     fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/lecturer/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -126,7 +138,8 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       .then(addedLecturer => {
         setEmails(prev => [...prev, addedLecturer.Email]);
         setSelectedEmail(addedLecturer.Email);
-        setFullName('');
+        setFirstName('');
+        setLastName('');
         setNewEmail('');
         window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Lecturer added.' } }));
       })
@@ -180,6 +193,31 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
           detail: { type: 'error', message: 'Failed to create package record.' }
         }));
       });
+  };
+
+  // NEW: Gemeinsame Funktion zum Senden von Paketen
+  const sendPackage = async () => {
+    const payload = {
+      lecturerEmail: selectedEmail || recognizedEmail,
+      itemCount,
+      shippingProvider,
+      additionalInfo: providerDescription || '',
+      // NEW: Bild-URL vom letzten Upload (unverarbeitet)
+      imageUrl: window.lastRawImageUrl || ''
+    };
+    const res = await fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Failed to create package');
+    const data = await res.json();
+    window.dispatchEvent(new CustomEvent('notice', {
+      detail: { type: 'success', message: 'Email sent to', lecturer: payload.lecturerEmail }
+    }));
+    fetchPackages();
+    setItemCount(1);
+    setProviderDescription('');
   };
 
   useEffect(() => { localStorage.setItem('shippingProvider', shippingProvider); }, [shippingProvider]);
@@ -288,12 +326,23 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
 
         <div className="new-lecturer">
           <h2>Add new Lecturer</h2>
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={fullName}
-            onChange={e => setFullName(e.target.value)}
-          />
+
+          {/* First/Last Name statt Full Name */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+            <input
+              type="text"
+              placeholder="First Name"
+              value={firstName}
+              onChange={e => setFirstName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Last Name"
+              value={lastName}
+              onChange={e => setLastName(e.target.value)}
+            />
+          </div>
+
           <input
             type="email"
             placeholder="New E-Mail"
