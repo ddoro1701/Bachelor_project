@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 using WebApplication1.Models;
 using Microsoft.Extensions.Configuration;
@@ -11,128 +12,140 @@ namespace WebApplication1.Services
     public class PackageService
     {
         private readonly IMongoCollection<Package> _packages;
-        private readonly LecturerService _lecturers;
 
-        public PackageService(IConfiguration configuration, LecturerService lecturers)
+        public PackageService(IConfiguration configuration)
         {
-            _lecturers = lecturers;
-            var conn = Environment.GetEnvironmentVariable("COSMOS_CONNECTION_STRING")
-                ?? configuration["COSMOS_CONNECTION_STRING"]
-                ?? configuration["MongoDB:ConnectionString"]
-                ?? throw new Exception("No DB connection string configured.");
-            var dbName = Environment.GetEnvironmentVariable("COSMOS_DATABASE_NAME")
-                ?? configuration["COSMOS_DATABASE_NAME"]
-                ?? configuration["MongoDB:DatabaseName"]
-                ?? throw new Exception("No DB name configured.");
-            var collName = Environment.GetEnvironmentVariable("COSMOS_PACKAGE_COLLECTION_NAME")
-                ?? configuration["COSMOS_PACKAGE_COLLECTION_NAME"]
-                ?? configuration["MongoDB:PackageCollectionName"]
+            var databaseName =
+                configuration["COSMOS_DATABASE_NAME"]
+                ?? configuration["CosmosDb:DatabaseName"]
+                ?? throw new Exception("COSMOS_DATABASE_NAME/CosmosDb:DatabaseName is not set.");
+
+            var collectionName =
+                configuration["COSMOS_COLLECTION_NAME"]
                 ?? "Packages";
 
-            var client = new MongoClient(conn);
-            var database = client.GetDatabase(dbName);
-            _packages = database.GetCollection<Package>(collName);
-        }
-
-        public async Task CreateAsync(Package pkg)
-        {
-            // Enrichment: Namen nachziehen, falls nicht vorhanden
-            if (!string.IsNullOrWhiteSpace(pkg.LecturerEmail) &&
-                (string.IsNullOrWhiteSpace(pkg.LecturerFirstName) || string.IsNullOrWhiteSpace(pkg.LecturerLastName)))
+            var conn = configuration["COSMOS_CONNECTION_STRING"];
+            if (string.IsNullOrWhiteSpace(conn))
             {
-                var lec = await _lecturers.GetByEmailAsync(pkg.LecturerEmail.Trim());
-                if (lec != null)
+                // Build from COSMOS_ACCOUNT/COSMOS_KEY or CosmosDb:Account/Key
+                var accountRaw = configuration["COSMOS_ACCOUNT"] ?? configuration["CosmosDb:Account"]
+                                 ?? throw new Exception("Set COSMOS_CONNECTION_STRING or COSMOS_ACCOUNT/COSMOS_KEY.");
+                var key = configuration["COSMOS_KEY"] ?? configuration["CosmosDb:Key"]
+                          ?? throw new Exception("Set COSMOS_KEY/CosmosDb:Key.");
+
+                // accountName aus FQDN extrahieren
+                var host = accountRaw.Replace("https://", "")
+                                     .Replace("mongodb://", "")
+                                     .Trim()
+                                     .TrimEnd('/');
+                // host kann z.B. "wrexhamuni-ocr-webapp-server.documents.azure.com" oder nur "wrexhamuni-ocr-webapp-server" sein
+                var accountName = host.Split('.').First();
+
+                if (host.Contains("documents.azure.com", StringComparison.OrdinalIgnoreCase))
                 {
-                    pkg.LecturerFirstName ??= lec.FirstName;
-                    pkg.LecturerLastName  ??= lec.LastName;
-                    if (string.IsNullOrWhiteSpace(pkg.LecturerFirstName) && !string.IsNullOrWhiteSpace(lec.Name))
-                    {
-                        var (first, last) = LecturerService.SplitFullName(lec.Name);
-                        pkg.LecturerFirstName = first;
-                        pkg.LecturerLastName = last;
-                    }
+                    // Legacy (Mongo v3.x) Verbindungszeichenfolge
+                    conn =
+                        $"mongodb://{Uri.EscapeDataString(accountName)}:{Uri.EscapeDataString(key)}@" +
+                        $"{accountName}.documents.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@{accountName}@";
                 }
-            }
-
-            // Defaults/Normalize: Uhrzeit behalten und in UTC speichern
-            if (pkg.CollectionDate.HasValue)
-            {
-                var dt = pkg.CollectionDate.Value;
-                if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Local);
-                pkg.CollectionDate = dt.ToUniversalTime();
+                else
+                {
+                    // vCore (SRV)
+                    conn =
+                        $"mongodb+srv://{Uri.EscapeDataString(accountName)}:{Uri.EscapeDataString(key)}@" +
+                        $"{accountName}.mongo.cosmos.azure.com/?retryWrites=false&tls=true";
+                }
             }
             else
             {
-                pkg.CollectionDate = DateTime.UtcNow; // NICHT .Date, damit Uhrzeit erhalten bleibt
+                // Falls jemand ein nacktes mongo:// ohne retryWrites=false setzt, ergänzen
+                if (!conn.Contains("retryWrites", StringComparison.OrdinalIgnoreCase))
+                {
+                    conn += (conn.Contains("?") ? "&" : "?") + "retryWrites=false";
+                }
             }
 
-            // QR-Token vor Insert erzeugen (14 Tage gültig)
-            pkg.QrToken ??= Guid.NewGuid().ToString("N");
-            pkg.QrExpiresAt ??= DateTime.UtcNow.AddDays(14);
+            var client = new MongoClient(conn);
+            var database = client.GetDatabase(databaseName);
+            _packages = database.GetCollection<Package>(collectionName);
 
-            pkg.Status ??= "Received";
-            await _packages.InsertOneAsync(pkg);
+            // Optional: Index für QrToken
+            var idx = new CreateIndexModel<Package>(
+                Builders<Package>.IndexKeys.Ascending(p => p.QrToken),
+                new CreateIndexOptions { Unique = true, Sparse = true });
+            _packages.Indexes.CreateOne(idx);
         }
 
-        // Kompatibilität: ältere Aufrufer können weiter AddPackageAsync benutzen
-        public Task AddPackageAsync(Package pkg) => CreateAsync(pkg);
+        public string DatabaseName => _packages.Database.DatabaseNamespace.DatabaseName;
+        public string CollectionName => _packages.CollectionNamespace.CollectionName;
 
-        // Back-compat: bisheriger Name
-        public async Task<List<Package>> GetAllPackagesAsync()
+        public Task<long> CountAsync() =>
+            _packages.CountDocumentsAsync(Builders<Package>.Filter.Empty);
+
+        public async Task<string?> FirstIdAsync()
         {
-            return await _packages.Find(_ => true).ToListAsync();
+            var doc = await _packages.Find(Builders<Package>.Filter.Empty)
+                                     .Project(Builders<Package>.Projection.Include("_id"))
+                                     .FirstOrDefaultAsync();
+            return doc?.GetValue("_id", default(BsonValue))?.ToString();
         }
 
-        // Neuer, vom Controller verwendeter Name
-        public async Task<List<Package>> GetAllAsync() // WebApplication1.Services.PackageService.GetAllAsync
+        public Task<List<Package>> GetAllAsync() =>
+            _packages.Find(Builders<Package>.Filter.Empty).ToListAsync();
+
+        public Task<Package?> GetByQrTokenAsync(string token) =>
+            _packages.Find(p => p.QrToken == token).FirstOrDefaultAsync();
+
+        public Task CreateAsync(Package package) =>
+            _packages.InsertOneAsync(package);
+
+        public async Task<bool> UpdateStatusAsync(string id, string status, bool viaQr = false)
         {
-            return await _packages
-                .Find(Builders<Package>.Filter.Empty)
-                .SortByDescending(p => p.CollectionDate)
-                .ToListAsync();
-        }
-
-        public async Task<bool> UpdatePackageStatusAsync(string id, string status, bool viaQr = false)
-        {
-            if (string.IsNullOrWhiteSpace(id)) return false;
-
-            // 1) Status immer aktualisieren
-            var filterById = Builders<Package>.Filter.Eq(p => p.Id, id);
-            var statusUpdate = Builders<Package>.Update.Set(p => p.Status, status);
-            var result = await _packages.UpdateOneAsync(filterById, statusUpdate);
-
-            // 2) QrUsedAt nur setzen, wenn via QR und Zielstatus = Collected und noch nicht gesetzt
-            if (viaQr && string.Equals(status, "Collected", StringComparison.OrdinalIgnoreCase))
+            var filter = Builders<Package>.Filter.Eq(p => p.Id, id);
+            var updates = new List<UpdateDefinition<Package>>
             {
-                var qrNotSet = Builders<Package>.Filter.Eq(p => p.QrUsedAt, (DateTime?)null);
-                var setQrTime = Builders<Package>.Update.Set(p => p.QrUsedAt, DateTime.UtcNow);
-                await _packages.UpdateOneAsync(Builders<Package>.Filter.And(filterById, qrNotSet), setQrTime);
+                Builders<Package>.Update.Set(p => p.Status, status)
+            };
+            if (viaQr)
+            {
+                updates.Add(Builders<Package>.Update.Set(p => p.QrUsedAt, DateTime.UtcNow));
+            }
+            var update = Builders<Package>.Update.Combine(updates);
+
+            var res = await _packages.UpdateOneAsync(filter, update);
+            return res.ModifiedCount == 1;
+        }
+
+        public async Task<int> DeleteCollectedAsync(ICollection<string> ids)
+        {
+            if (ids.Count == 0) return 0;
+
+            // support both string ids and ObjectId-compatible ids
+            var objIds = ids
+                .Select(x => ObjectId.TryParse(x, out var oid) ? oid : (ObjectId?)null)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .ToArray();
+
+            var filter = Builders<Package>.Filter.And(
+                Builders<Package>.Filter.In(p => p.Id, ids),
+                Builders<Package>.Filter.Eq(p => p.Status, "Collected")
+            );
+
+            // Also try matching raw ObjectId in case Id field stores it as _id
+            if (objIds.Length > 0)
+            {
+                filter = Builders<Package>.Filter.Or(
+                    filter,
+                    Builders<Package>.Filter.And(
+                        Builders<Package>.Filter.In("_id", objIds),
+                        Builders<Package>.Filter.Eq(p => p.Status, "Collected")
+                    )
+                );
             }
 
-            return result.ModifiedCount > 0;
-        }
-
-        public async Task<long> DeleteCollectedAsync(IEnumerable<string> ids)
-        {
-            var idList = ids?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? new();
-            if (idList.Count == 0) return 0;
-            var filter = Builders<Package>.Filter.In(p => p.Id, idList);
-            var result = await _packages.DeleteManyAsync(filter);
-            return result.DeletedCount;
-        }
-
-        public async Task<Package?> GetByQrTokenAsync(string token)
-            => await _packages.Find(p => p.QrToken == token).FirstOrDefaultAsync();
-
-        public async Task<(bool updated, string? id, bool alreadyCollected)> AutoCollectByTokenAsync(string token)
-        {
-            if (string.IsNullOrWhiteSpace(token)) return (false, null, false);
-            var pkg = await _packages.Find(p => p.QrToken == token).FirstOrDefaultAsync();
-            if (pkg == null) return (false, null, false);
-
-            var already = string.Equals(pkg.Status, "Collected", StringComparison.OrdinalIgnoreCase);
-            var ok = await UpdatePackageStatusAsync(pkg.Id!, "Collected", viaQr: true);
-            return (ok || already, pkg.Id, already);
+            var res = await _packages.DeleteManyAsync(filter);
+            return (int)res.DeletedCount;
         }
     }
 }

@@ -1,15 +1,18 @@
 using System;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using System.Text.Json.Serialization;
 
 namespace WebApplication1.Models
 {
     public class Package
     {
+        // Let the DB generate _id on insert; do not require it in requests
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Id { get; set; }
-
+        //
         public string? LecturerEmail { get; set; }
         public string? LecturerFirstName { get; set; }
         public string? LecturerLastName { get; set; }

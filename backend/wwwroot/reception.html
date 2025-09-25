@@ -13,6 +13,14 @@
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .msg{margin:.5rem 0}
     img{max-width:280px;border:1px solid #374151;border-radius:6px}
+    .wrap-email {
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+      display: block; /* forces it under the label */
+      max-width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -21,7 +29,7 @@
     <div id="msg" class="msg"></div>
     <div id="content" style="display:none">
       <div class="row"><b>Lecturer</b><span id="lec"></span></div>
-      <div class="row"><b>Email</b><span id="email"></span></div>
+      <div class="row"><b>Email</b><div id="lecturerEmail" class="wrap-email"><!-- populated by script --></div></div>
       <div class="row"><b>Items</b><span id="items"></span></div>
       <div class="row"><b>Provider</b><span id="prov"></span></div>
       <div class="row"><b>Info</b><span id="info"></span></div>

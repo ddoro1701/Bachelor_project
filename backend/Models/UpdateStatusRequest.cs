@@ -11,7 +11,6 @@ namespace WebApplication1.Models
         [JsonPropertyName("status")]
         public string Status { get; set; } = string.Empty;
 
-        // NEW: Kennzeichnet, dass die Aktion aus dem QR-Flow kommt
         [JsonPropertyName("viaQr")]
         public bool ViaQr { get; set; } = false;
     }

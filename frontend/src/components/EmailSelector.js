@@ -74,6 +74,16 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
     }
   }, [ocrText]);
 
+  // Helper to build recipient label robustly
+  const buildRecipientLabel = (data, fallbackEmail) => {
+    const first = data?.lecturerFirstName || data?.LecturerFirstName || '';
+    const last  = data?.lecturerLastName  || data?.LecturerLastName  || '';
+    const email = data?.lecturerEmail || data?.LecturerEmail || fallbackEmail || '';
+    const name = [first, last].filter(Boolean).join(' ').trim();
+    return name ? `${name} <${email}>` : email;
+  };
+
+  // SEND using recognizedEmail
   const handleSendEmail = () => {
     if (!recognizedEmail) {
       window.dispatchEvent(new CustomEvent('notice', {
@@ -87,9 +97,9 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
       ShippingProvider: shippingProvider,
       AdditionalInfo: providerDescription,
       CollectionDate: new Date(),
-      // NEW: unverarbeitetes Bild aus dem letzten Upload
-      ImageUrl: window.lastRawImageUrl || ''
+      Status: 'Received'
     };
+
     fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -99,20 +109,67 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         if (!res.ok) throw new Error('Error sending package data');
         return res.json();
       })
-      .then(() => {
+      .then(data => {
+        const label = buildRecipientLabel(data, recognizedEmail);
         window.dispatchEvent(new CustomEvent('notice', {
-          detail: { type: 'success', message: 'Email sent to', lecturer: recognizedEmail }
+          detail: { type: 'success', message: `Email sent to: ${label}` }
         }));
         fetchPackages();
         setItemCount(1);
         setProviderDescription('');
       })
-      .catch(() => {
+      .catch(err => {
+        console.error('Send error:', err);
         window.dispatchEvent(new CustomEvent('notice', {
           detail: { type: 'error', message: 'Failed to create package record.' }
         }));
       });
   };
+
+  // SEND using manually chosen email
+  const handleSendEmailWithChosenEmail = () => {
+    if (!selectedEmail) {
+      window.dispatchEvent(new CustomEvent('notice', {
+        detail: { type: 'error', message: 'No lecturer email selected.' }
+      }));
+      return;
+    }
+    const packageData = {
+      LecturerEmail: selectedEmail,
+      ItemCount: parseInt(itemCount, 10),
+      ShippingProvider: shippingProvider,
+      AdditionalInfo: providerDescription,
+      CollectionDate: new Date(),
+      Status: 'Received'
+    };
+
+    fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(packageData),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Error sending package data with chosen email');
+        return res.json();
+      })
+      .then(data => {
+        const label = buildRecipientLabel(data, selectedEmail);
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'success', message: `Email sent to: ${label}` }
+        }));
+        fetchPackages();
+        setItemCount(1);
+        setProviderDescription('');
+      })
+      .catch(err => {
+        console.error('Send error:', err);
+        window.dispatchEvent(new CustomEvent('notice', {
+          detail: { type: 'error', message: 'Failed to create package record.' }
+        }));
+      });
+  };
+
+  // OPTIONAL: remove any older unused sendPackage() versions to avoid camelCase payload confusion
 
   // Replace handleAddEmail to use FirstName/LastName
   const handleAddEmail = () => {
@@ -161,63 +218,6 @@ const EmailSelector = ({ ocrText, fetchPackages }) => {
         setSelectedEmail(remaining.length > 0 ? remaining[0] : '');
       })
       .catch(err => console.error('Error deleting email:', err));
-  };
-
-  const handleSendEmailWithChosenEmail = () => {
-    const packageData = {
-      LecturerEmail: selectedEmail,
-      ItemCount: parseInt(itemCount, 10),
-      ShippingProvider: shippingProvider,
-      AdditionalInfo: providerDescription,
-      CollectionDate: new Date(),
-    };
-    fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(packageData),
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Error sending package data with chosen email');
-        return res.json();
-      })
-      .then(() => {
-        window.dispatchEvent(new CustomEvent('notice', {
-          detail: { type: 'success', message: 'Email sent to', lecturer: selectedEmail }
-        }));
-        fetchPackages();
-        setItemCount(1);
-        setProviderDescription('');
-      })
-      .catch(() => {
-        window.dispatchEvent(new CustomEvent('notice', {
-          detail: { type: 'error', message: 'Failed to create package record.' }
-        }));
-      });
-  };
-
-  // NEW: Gemeinsame Funktion zum Senden von Paketen
-  const sendPackage = async () => {
-    const payload = {
-      lecturerEmail: selectedEmail || recognizedEmail,
-      itemCount,
-      shippingProvider,
-      additionalInfo: providerDescription || '',
-      // NEW: Bild-URL vom letzten Upload (unverarbeitet)
-      imageUrl: window.lastRawImageUrl || ''
-    };
-    const res = await fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('Failed to create package');
-    const data = await res.json();
-    window.dispatchEvent(new CustomEvent('notice', {
-      detail: { type: 'success', message: 'Email sent to', lecturer: payload.lecturerEmail }
-    }));
-    fetchPackages();
-    setItemCount(1);
-    setProviderDescription('');
   };
 
   useEffect(() => { localStorage.setItem('shippingProvider', shippingProvider); }, [shippingProvider]);

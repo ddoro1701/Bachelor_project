@@ -21,6 +21,7 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
             Header: 'Image',
             accessor: 'imageUrl',
             disableFilters: true,
+            disableSortBy: true, // no sorting (hides sort icon)
             Cell: ({ value }) => value ? (
                 <img
                   src={value}
@@ -33,6 +34,21 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
         {
             Header: 'Lecturer Email',
             accessor: 'lecturerEmail',
+            Cell: ({ value }) => (
+              <span
+                style={{
+                  display: 'inline-block',
+                  maxWidth: 260,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
+                  lineHeight: 1.2,
+                }}
+                title={value}
+              >
+                {value}
+              </span>
+            ),
         },
         {
             Header: 'Item Count',
@@ -62,43 +78,44 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
         {
             Header: 'Status',
             accessor: 'status',
+            width: 220,
+            minWidth: 200,
+            maxWidth: 260,
             Cell: ({ row, value }) => {
                 const isCollected = value === 'Collected';
-                const scannedAt = row.original.qrUsedAt || row.original.QrUsedAt; // Backend liefert camelCase
+                const scannedAt = row.original.qrUsedAt || row.original.QrUsedAt;
                 const scannedDate = scannedAt ? new Date(scannedAt) : null;
-                const title = scannedDate
-                  ? `QR scanned: ${scannedDate.toLocaleString()}`
-                  : (isCollected ? 'Collected' : 'Received');
-
                 return (
-                  <span
-                    className={`status-pill ${isCollected ? 'collected' : 'received'}`}
-                    title={title}
-                  >
-                    <span className="status-dot" aria-hidden="true"></span>
-                    {value}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap: 4 }}>
+                    <span className={`status-pill ${isCollected ? 'collected' : 'received'}`}>
+                      <span className="status-dot" aria-hidden="true"></span>
+                      {value}
+                    </span>
                     {scannedDate && (
-                      <span className="qr-flag" title={title}>
+                      <span className="qr-flag qr-below" title={`QR scanned: ${scannedDate.toLocaleString()}`}>
                         <svg viewBox="0 0 24 24" className="qr-ico" aria-hidden="true">
-                          <path fill="currentColor"
-                            d="M3 3h8v8H3V3m2 2v4h4V5H5m6 6h2v2h-2v-2m4 0h6v6h-6v-6m2 2v2h2v-2h-2M3 13h8v8H3v-8m2 2v4h4v-4H5m10 4h2v2h-2v-2m4-4h2v6h-6v-2h4v-4Z"/>
-                          </svg>
+                          <path fill="currentColor" d="M3 3h8v8H3V3m2 2v4h4V5H5m6 6h2v2h-2v-2m4 0h6v6h-6v-2h4v-4Z"/>
+                        </svg>
                         <span className="qr-ts">
-                          {scannedDate.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit' })}
+                          {scannedDate.toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })}
                         </span>
                       </span>
                     )}
-                  </span>
+                  </div>
                 );
             },
         },
         {
             Header: 'Action',
+            disableSortBy: true,
+            width: 170,
+            minWidth: 150,
             Cell: ({ row }) => {
                 const isCollected = row.original.status === 'Collected';
                 return (
                   <button
                     className={`btn action ${isCollected ? 'make-received' : 'make-collected'}`}
+                    style={{ whiteSpace: 'nowrap' }}
                     onClick={() => onToggleStatus(row.original)}
                     title={isCollected ? 'Mark as Received' : 'Mark as Collected'}
                   >
@@ -187,13 +204,17 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
               }));
 
               fetch('https://wrexhamuni-ocr-webapp-deeaeydrf2fdcfdy.uksouth-01.azurewebsites.net/api/package/delete-collected', {
-                  method: 'DELETE',
+                  method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ids: collectedEntries })
               })
-                  .then(res => {
-                      if (!res.ok) throw new Error('Failed to delete collected entries');
-                      return res.json();
+                  .then(async res => {
+                      if (!res.ok) {
+                          const msg = await res.text().catch(() => '');
+                          throw new Error(msg || 'Failed to delete collected entries');
+                      }
+                      const text = await res.text().catch(() => '');
+                      return text ? JSON.parse(text) : null;
                   })
                   .then(() => {
                       if (typeof onDeleteCollected === "function") onDeleteCollected(collectedEntries);
@@ -211,7 +232,7 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
     return (
       <div>
         <div className="table-wrapper">
-          <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
                 {headerGroups.map(headerGroup => (
                     <tr {...headerGroup.getHeaderGroupProps()}>
@@ -221,8 +242,8 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
                                     <span className="th-title">
                                         {column.render('Header') === 'Action' ? '' : column.render('Header')}
                                     </span>
-                                    {/* Sort nur über Icon-Button */}
-                                    {column.render('Header') !== 'Action' && (
+                                    {/* show sort only if column can sort */}
+                                    {column.canSort && (
                                         <button
                                             className="sort-btn"
                                             {...column.getSortByToggleProps()}
@@ -285,11 +306,11 @@ function LogTable({ data, onToggleStatus, onDeleteCollected }) {
           </div>
         )}
 
-        <div style={{ marginTop: '10px' }}>
+        <div className="table-controls">
             <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
             <button onClick={() => previousPage()} disabled={!canPreviousPage}>Previous</button>
 
-            {/* Page-Size Select zwischen Previous and Next, schmal */}
+            <span>Rows:</span>
             <select
                 className="page-size"
                 value={pageSize}

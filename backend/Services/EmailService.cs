@@ -18,24 +18,7 @@ namespace WebApplication1.Services
             _emailClient = new EmailClient(connectionString);
         }
 
-        private static string FormatUkDateTime(DateTime utc)
-        {
-            try
-            {
-#if WINDOWS
-                var tz = TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time");
-#else
-                var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
-#endif
-                var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
-                return local.ToString("dd.MM.yyyy HH:mm");
-            }
-            catch
-            {
-                return DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToString("yyyy-MM-dd HH:mm 'UTC'");
-            }
-        }
-
+        // Update signature to match controller call
         public async Task SendPackageEmailAsync(
             string toEmail,
             string subject,
@@ -43,48 +26,44 @@ namespace WebApplication1.Services
             string shippingProvider,
             string additionalInfo,
             DateTime collectionDateUtc,
-            string? imageUrl = null,
-            string? qrLink = null,
-            string? qrImageDataUri = null) // ensure params exist
+            string receptionUrl,
+            string qrDataUri,
+            string? imageUrl
+        )
         {
             try
             {
-                var when = FormatUkDateTime(collectionDateUtc);
-
-                var qrHtml = string.IsNullOrWhiteSpace(qrLink) ? "" :
-$@"<p><strong>Reception Link (QR):</strong><br/>
-<a href=""{qrLink}"">{qrLink}</a><br/>
-{(string.IsNullOrWhiteSpace(qrImageDataUri) ? "" : $@"<img src=""{qrImageDataUri}"" alt=""QR"" style=""width:200px;height:200px;margin-top:6px;"" />")}
-</p>";
-
-                var imageHtml = string.IsNullOrWhiteSpace(imageUrl) ? "" :
-$@"<p><strong>Label Image:</strong><br/>
-<a href=""{imageUrl}"" target=""_blank"">{imageUrl}</a><br/>
-<img src=""{imageUrl}"" alt=""Label Image"" style=""max-width:480px;height:auto;border:1px solid #ddd;border-radius:4px;margin-top:6px;"" />
-</p>";
+                // Build HTML with extra info (QR and reception link)
+                var collectionLocal = collectionDateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+                var imgHtml = string.IsNullOrWhiteSpace(imageUrl) ? "" : $"<p><img alt=\"Package Image\" src=\"{imageUrl}\" style=\"max-width:480px;border:1px solid #ccc\"/></p>";
+                var qrHtml = string.IsNullOrWhiteSpace(qrDataUri) ? "" : $"<p><img alt=\"QR Code\" src=\"{qrDataUri}\" style=\"width:180px;height:180px\"/></p>";
 
                 var emailBody = $@"
-<html><body>
-  <h1>{subject}</h1>
-  <p><strong>Lecturer Email:</strong> {toEmail}</p>
-  <p><strong>Item Count:</strong> {itemCount}</p>
-  <p><strong>Shipping Provider:</strong> {shippingProvider}</p>
-  <p><strong>Additional Information:</strong> {additionalInfo}</p>
-  <p><strong>Collection Date/Time:</strong> {FormatUkDateTime(collectionDateUtc)}</p>
-  {imageHtml}
-  {qrHtml}
-</body></html>";
+<html>
+  <body style=""font-family:Arial, Helvetica, sans-serif"">
+    <h2>{subject}</h2>
+    <p><strong>Lecturer Email:</strong> {toEmail}</p>
+    <p><strong>Item Count:</strong> {itemCount}</p>
+    <p><strong>Shipping Provider:</strong> {shippingProvider}</p>
+    <p><strong>Additional Information:</strong> {System.Net.WebUtility.HtmlEncode(additionalInfo ?? string.Empty)}</p>
+    <p><strong>Logged at:</strong> {collectionLocal}</p>
+    {imgHtml}
+    <p><a href=""{receptionUrl}"">Open collection page</a></p>
+    {qrHtml}
+    <hr/>
+    <p><strong>Opening Hours</strong></p>
+    <p>10am - 12pm</p>
+    <p>2pm - 3pm</p>
+    <p>Closed for Lunch: 12pm - 2pm</p>
+    <p>Outgoing mail <strong>NO</strong> later than 2.30pm</p>
+    <p>Thank you for your cooperation.</p>
+    <p>Best regards,</p>
+  </body>
+</html>";
 
                 var emailContent = new EmailContent(subject)
                 {
-                    PlainText =
-$@"Lecturer Email: {toEmail}
-Item Count: {itemCount}
-Shipping Provider: {shippingProvider}
-Additional Information: {additionalInfo}
-Collection Date/Time: {FormatUkDateTime(collectionDateUtc)}
-{(string.IsNullOrWhiteSpace(imageUrl) ? "" : $"Label Image: {imageUrl}")}
-{(string.IsNullOrWhiteSpace(qrLink) ? "" : $"Reception Link: {qrLink}")}",
+                    PlainText = $"Lecturer Email: {toEmail}\nItem Count: {itemCount}\nShipping Provider: {shippingProvider}\nAdditional Information: {additionalInfo}\nLogged at (local): {collectionLocal}\nCollection page: {receptionUrl}",
                     Html = emailBody
                 };
 
@@ -94,7 +73,6 @@ Collection Date/Time: {FormatUkDateTime(collectionDateUtc)}
                     recipients: new EmailRecipients(new List<EmailAddress> { new EmailAddress(toEmail) })
                 );
 
-                // Send the email
                 EmailSendOperation emailSendOperation = await _emailClient.SendAsync(WaitUntil.Completed, emailMessage);
                 Console.WriteLine($"Email sent successfully. Message ID: {emailSendOperation.Id}");
             }
